@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <title>Helpdesk - Komentarze</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      max-width: 700px;
+      margin: 40px auto;
+      background: #f9f9f9;
+      color: #333;
+    }
+    h1 {
+      text-align: center;
+      color: #005f73;
+    }
+    ul#comments {
+      list-style-type: none;
+      padding: 0;
+    }
+    li.comment {
+      background: #ffffff;
+      margin-bottom: 15px;
+      padding: 15px 20px;
+      border-radius: 8px;
+      box-shadow: 0 1px 5px rgba(0,0,0,0.1);
+      transition: box-shadow 0.3s ease;
+    }
+    li.comment:hover {
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    .author {
+      font-weight: 700;
+      color: #0a9396;
+    }
+    .content {
+      margin: 10px 0;
+      font-size: 1.1em;
+      line-height: 1.4;
+    }
+    .timestamp {
+      font-size: 0.85em;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <h1>Komentarze Helpdesk</h1>
+  <ul id="comments"></ul>
+
+  <form id="commentForm" style="margin-top:30px; max-width:700px;">
+  <h2>Dodaj komentarz</h2>
+  
+  <label for="ticket_id">Ticket ID:</label>
+  <input type="text" id="ticket_id" name="ticket_id" required style="width:100%;padding:8px;margin-bottom:10px;"/>
+  
+  <label for="author_id">Author ID:</label>
+  <input type="text" id="author_id" name="author_id" required style="width:100%;padding:8px;margin-bottom:10px;"/>
+  
+  <label for="content">Treść komentarza:</label>
+  <textarea id="content" name="content" required rows="3" style="width:100%;padding:8px;margin-bottom:10px;"></textarea>
+  
+  <button type="submit" style="padding:10px 20px; background:#0a9396; border:none; color:#fff; cursor:pointer; border-radius:5px;">
+    Dodaj komentarz
+  </button>
+</form>
+
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    const commentsList = document.getElementById('comments');
+
+    function formatDate(isoString) {
+      const date = new Date(isoString);
+      return date.toLocaleString('pl-PL', { dateStyle: 'medium', timeStyle: 'short' });
+    }
+
+  function addComment(comment) {
+    const li = document.createElement('li');
+    li.className = 'comment';
+
+    const author = comment.name || comment.user?.name || comment.author_id || 'Anonim';
+    const ticketNumber = comment.number || comment.ticket?.number || comment.ticket_id || '';
+    const timestamp = comment.created_at ? formatDate(comment.created_at) : 'brak daty';
+
+    li.innerHTML = `
+      <div class="author">${author} <small style="color:#888">[Ticket: ${ticketNumber}]</small></div>
+      <div class="content">${comment.content}</div>
+      <div class="timestamp">${timestamp}</div>
+    `;
+
+  commentsList.appendChild(li);
+}
+
+    fetch('/comments')
+      .then(res => res.json())
+      .then(data => {
+        data.forEach(addComment);
+      })
+      .catch(e => console.error('Błąd pobierania komentarzy:', e));
+
+    socket.on('new_message', (comment) => {
+      addComment(comment);
+    });
+
+    const form = document.getElementById('commentForm');
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  const ticket_id = form.ticket_id.value.trim();
+  const author_id = form.author_id.value.trim();
+  const content = form.content.value.trim();
+
+  if (!ticket_id || !author_id || !content) {
+    alert('Wypełnij wszystkie pola!');
+    return;
+  }
+
+  const newComment = { ticket_id, author_id, content };
+
+  try {
+    const res = await fetch('/comments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newComment),
+    });
+    if (!res.ok) throw new Error('Nie udało się dodać komentarza');
+    form.reset();
+  } catch (error) {
+    alert(error.message);
+  }
+});
+
+  </script>
+</body>
+</html>

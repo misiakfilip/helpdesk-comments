@@ -1,0 +1,58 @@
+// ======= backend/server.js =======
+const express = require('express');
+const http = require('http');
+const socketIo = require('socket.io');
+const r = require('rethinkdb');
+
+const app = express();
+const server = http.createServer(app);
+const io = socketIo(server);
+
+let conn;
+
+r.connect({ host: 'localhost', port: 28015, db: 'helpdesk' }, (err, connection) => {
+  if (err) throw err;
+  conn = connection;
+
+  // Nasłuchiwanie zmian w tabeli tickets
+  r.table('tickets').changes().run(conn, (err, cursor) => {
+    if (err) throw err;
+    cursor.each((err, row) => {
+      if (err) throw err;
+      io.emit('ticket_change', row); // Wysyłamy do frontendu
+    });
+  });
+});
+
+// Serwujemy frontend
+app.use(express.static(__dirname + '/public'));
+
+server.listen(3000, () => {
+  console.log('🚀 Server running on http://localhost:3000');
+});
+
+
+// ======= frontend/public/index.html =======
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Helpdesk Changefeed Demo</title>
+</head>
+<body>
+  <h1>🔄 Live Updates (Changefeeds)</h1>
+  <ul id="feed"></ul>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    const feed = document.getElementById('feed');
+
+    socket.on('ticket_change', (change) => {
+      const li = document.createElement('li');
+      li.textContent = JSON.stringify(change);
+      feed.prepend(li);
+    });
+  </script>
+</body>
+</html>
